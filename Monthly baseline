@@ -1,0 +1,250 @@
+rm(list=ls())
+
+library(dynlm)
+library(DataCombine)
+library(MASS)
+library(stargazer)
+library(sandwich)
+
+## Remove previous plots
+dev.off()
+
+setwd("F:/Final 2YP/2YP/R code/Second draft 2YP code")
+
+data <- data.frame(read.csv("selectdatam.csv", header=T))
+
+## Set parameters for plot windows
+w<-5
+h<-3
+
+## Sets number of control lags (numlags), length of IRF (numres)
+## romer is how many periods before we start counting (at 1970)
+numlags<-24
+numres<-48
+romer<-49
+size<-as.numeric(dim(data)[1])
+
+
+noms<-c("CPI","Industrial Production","Employment","Unemployment rate")
+
+mths<-c(0:numres)
+
+## First column pulled (colmin) and last column pulled (colmax) for % chg
+colmin<-6
+colmax<-8
+
+## Generate empty structures to be filled with coefficient estimates
+gamma<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+gamma_se<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+
+theta<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+theta_se<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+
+sigma<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+sigma_se<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+
+gamma_naive<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+gamma_naive_se<-matrix(0,nrow=(colmax-colmin+2),ncol=numres+1)
+
+X<-cbind(data[((romer):(size-numres)),(2:(colmin-1))])
+
+
+######### For well-behaved variables ###########
+for(j in (colmin:colmax)){
+  
+  ## Take log of the series of interest
+  loglevel<-cbind(log(data[,j]))
+  size<-dim(loglevel)[1]
+  
+  ## Generate the lagged % changes and combine them with other regressors into M
+  lags<-embed(loglevel,dimension=numlags+1)[,-1]
+  varlevels<-lags
+  for(i in 1:numlags){
+    varlevels[,i]<-loglevel[-(1:numlags)]
+  }
+  lagdif<-varlevels-lags
+  M<-cbind.data.frame(X,lagdif[((romer-numlags):(size-numlags-numres)),])
+  names(M)[-(1:(colmin-2))]<-paste0('x',1:(ncol(M)-(colmin-2)))
+  
+  ##### Interaction terms #####
+  for(i in 1:numres){
+    y<-shift(loglevel,i,reminder=F)-loglevel
+    y<-cbind(y[(romer:(size-numres))])
+    z<-cbind.data.frame(y,M)
+    
+    eq <- lm(y ~ rr +interact +ffindic +x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+x11+x12+x13+x14
+             +x15+x16+x17+x18+x19+x20+x21+x22+x23+x24, data=z)
+    newey<-NeweyWest(eq)
+    
+    gamma[(j-colmin)+1,(i+1)]<-coef(summary(eq))[2,1]
+    gamma_se[(j-colmin)+1,(i+1)]<-sqrt(newey[2,2])
+    
+    theta[(j-colmin)+1,(i+1)]<-coef(summary(eq))[4,1]
+    theta_se[(j-colmin)+1,(i+1)]<-sqrt(newey[4,4])
+    
+    sigma[(j-colmin)+1,(i+1)]<-coef(summary(eq))[3,1]
+    sigma_se[(j-colmin)+1,(i+1)]<-sqrt(newey[3,3])
+    
+  }
+  
+  ###### Naive estimates ######
+  for(i in 1:numres){
+    y<-shift(loglevel,i,reminder=F)-loglevel
+    y<-cbind(y[(romer:(size-numres))])
+    z<-cbind.data.frame(y,M)
+    
+    eq <- lm(y ~ rr +x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+x11+x12+x13+x14
+             +x15+x16+x17+x18+x19+x20+x21+x22+x23+x24, data=z)
+    newey<-NeweyWest(eq)
+    gamma_naive[(j-colmin)+1,(i+1)]<-coef(summary(eq))[2,1]
+    gamma_naive_se[(j-colmin)+1,(i+1)]<-sqrt(newey[2,2])
+  
+  }
+
+}
+
+###############################################################################
+#
+######### For level variables (PP difference) #################################
+
+######### Interaction ###########
+
+  level<-cbind((data[,(colmax+1)]))
+  size<-dim(level)[1]
+  
+  ## Generate the lagged % changes and combine them with other regressors into M
+  lags<-embed(level,dimension=numlags+1)[,-1]
+  varlevels<-lags
+  for(i in 1:numlags){
+    varlevels[,i]<-level[-(1:numlags)]
+  }
+  lagdif<-varlevels-lags
+  M<-cbind.data.frame(X,lagdif[((romer-numlags):(size-numlags-numres)),])
+  names(M)[-(1:(colmin-2))]<-paste0('x',1:(ncol(M)-(colmin-2)))
+  
+  ##### Interaction terms #####
+for(i in 1:numres){
+    y<-shift(level,i,reminder=F)-level
+    y<-cbind(y[(romer:(size-numres))])
+    z<-cbind.data.frame(y,M)
+    
+    eq <- lm(y ~ rr +interact +ffindic +x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+x11+x12+x13+x14
+             +x15+x16+x17+x18+x19+x20+x21+x22+x23+x24, data=z)
+    newey<-NeweyWest(eq)
+    
+    gamma[(colmax-colmin+2),(i+1)]<-coef(summary(eq))[2,1]
+    gamma_se[(colmax-colmin+2),(i+1)]<-sqrt(newey[2,2])
+    
+    theta[(colmax-colmin+2),(i+1)]<-coef(summary(eq))[4,1]
+    theta_se[(colmax-colmin+2),(i+1)]<-sqrt(newey[4,4])
+    
+    sigma[(colmax-colmin+2),(i+1)]<-coef(summary(eq))[3,1]
+    sigma_se[(colmax-colmin+2),(i+1)]<-sqrt(newey[3,3])
+    
+  }
+  
+###### Naive estimates ######
+for(i in 1:numres){
+    y<-shift(level,i,reminder=F)-level
+    y<-cbind(y[(romer:(size-numres))])
+    z<-cbind.data.frame(y,M)
+    
+    eq <- lm(y ~ rr +x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+x11+x12+x13+x14
+             +x15+x16+x17+x18+x19+x20+x21+x22+x23+x24, data=z)
+    newey<-NeweyWest(eq)
+    gamma_naive[(colmax-colmin+2),(i+1)]<-coef(summary(eq))[2,1]
+    gamma_naive_se[(colmax-colmin+2),(i+1)]<-sqrt(newey[2,2])
+    
+}
+  
+  ###############################################################################
+  ###############################################################################
+  ###############################################################################
+  #
+  #   Plots begin here
+  #
+  ###############################################################################
+  ###############################################################################
+  ###############################################################################
+  
+  
+  ########## Gammas and sigmas plot ##########
+  windows(width=w,height=h)
+  par(oma=c(2,1,1,1))
+  m <- matrix(c(1,2,3,4),nrow = 2,ncol = 2,byrow = TRUE)
+  layout(mat = m,heights = c(0.4,0.4,0.2))
+  
+  for(k in 1:(colmax-colmin+2)){
+    
+    ## Set up the plots to be well-behaved
+    
+    
+    irf1<-gamma[k,]+sigma[k,]
+    irf2<-gamma[k,]
+    irf3<-gamma_naive[k,]
+    
+    ymin<-min(min(irf1),min(irf2),min(irf3))
+    ymax<-max(max(irf1),max(irf2),max(irf3))
+    y_range<-c(ymin,ymax)
+    
+    par(mar = c(2,2,1,1))
+    plot(x=mths,y=irf1,type="l",col="red",lwd=2,ylim=y_range,ann=FALSE)
+    lines(x=mths,y=irf2,type="l",lty=2,col="blue",lwd=2)
+    lines(x=mths,y=irf3,type="l",lty=3,col="black",lwd=3)
+    abline(a=0,b=0,col="black",lwd=1)
+    title(main=noms[k], col.main="blue", font.main=2)
+    
+  }
+  
+  par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+  plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
+  legend(x="bottom",inset=0,legend=c("Type 1 contraction","Type 2 contraction","Naive estimate"),
+         lwd=c(2,2,2),lty=c(1,2,3),col=c("red","blue","black"),cex=1,horiz=TRUE)
+  
+  
+  ########## Just sigmas ##########
+  
+  windows(width=w,height=h)
+  par(oma=c(2,1,1,1))
+  m <- matrix(c(1,2,3,4),nrow = 2,ncol = 2,byrow = TRUE)
+  layout(mat = m,heights = c(0.4,0.4,0.2))
+  
+  for(k in 1:(colmax-colmin+2)){
+    
+    ## Set up the plots to be well-behaved
+    
+    
+    irf1<-sigma[k,]
+    irf2<-sigma[k,]+sigma_se[k,]
+    irf3<-sigma[k,]-sigma_se[k,]
+    
+    
+    ymin<-min(min(irf1),min(irf2),min(irf3))
+    ymax<-max(max(irf1),max(irf2),max(irf3))
+    y_range<-c(ymin,ymax)
+    
+    par(mar = c(2,2,1,1))
+    plot(x=mths,y=irf1,type="l",col="blue",lwd=3,ylim=y_range,ann=FALSE)
+    lines(x=mths,y=irf2,type="l",lty=2,col="red",lwd=2)
+    lines(x=mths,y=irf3,type="l",lty=2,col="red",lwd=2)
+    abline(a=0,b=0,col="black",lwd=1)
+    title(main=noms[k], col.main="blue", font.main=2)
+    
+  }
+  
+  par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+  plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
+  legend(x="bottom",inset=0,legend=c("Coefficient estimate","+/- 1 SE"),
+         lwd=c(2,2),lty=c(1,2),col=c("blue","red"),cex=1,horiz=TRUE)
+  
+####################
+## Evaluating #'s ##
+####################
+  
+q<-3
+
+min(gamma[q,]+sigma[q,])
+min(sigma[q,])
+
+
+
